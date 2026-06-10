@@ -77,7 +77,7 @@ io.on('connection', (socket) => {
     function updateTurn() {
         if (turnOrder.length > 0) {
             const currentTurnId = turnOrder[currentTurnIndex];
-            io.emit('turnUpdate', currentTurnId);
+           io.emit('turnUpdate', { currentTurnId: currentTurnId, order: turnOrder });
         }
     }
 });
