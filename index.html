@@ -4,27 +4,22 @@
     <meta charset="UTF-8">
     <title>地獄拖拉機大富翁</title>
     <style>
-        body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #f0f8ff; }
-        /* 遊戲板：立體草地質感 */
+        body { text-align: center; font-family: sans-serif; background: #f0f8ff; }
         #game-board { position: relative; width: 600px; height: 450px; margin: 20px auto; background: #e8f5e9; border: 6px solid #4caf50; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-        
-        /* 空間方塊：立體厚度感 */
-        .space { position: absolute; width: 70px; height: 70px; background: #64b5f6; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 0 #1e88e5; font-weight: bold; }
-        
-        /* 玩家角色：呼吸彈跳特效 */
-        .player { position: absolute; width: 40px; height: 40px; font-size: 30px; transition: all 0.4s ease-in-out; z-index: 10; animation: bounce 0.6s infinite alternate; }
+        .space { position: absolute; width: 70px; height: 70px; background: #64b5f6; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 0 #1e88e5; }
+        .player { position: absolute; width: 40px; height: 40px; font-size: 30px; transition: all 0.4s; z-index: 10; animation: bounce 0.6s infinite alternate; }
         @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
-        
-        button { font-size: 20px; padding: 10px 20px; background: #ff9800; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #e65100; }
-        button:disabled { background: #ccc; box-shadow: 0 4px 0 #999; }
+        button { font-size: 20px; padding: 10px 20px; background: #ff9800; color: white; border: none; border-radius: 10px; cursor: pointer; }
+        button:disabled { background: #ccc; }
     </style>
 </head>
 <body>
     <div id="login-screen">
         <h2>選擇角色</h2>
-        <button onclick="joinGame('👼')">👼</button>
-        <button onclick="joinGame('🦊')">🦊</button>
-        <button onclick="joinGame('👻')">👻</button>
+        <button class="avatar-btn" onclick="joinGame('👼')">👼</button>
+        <button class="avatar-btn" onclick="joinGame('🦊')">🦊</button>
+        <button class="avatar-btn" onclick="joinGame('👻')">👻</button>
+        <button class="avatar-btn" onclick="joinGame('🐸')">🐸</button>
     </div>
     <div id="game-container" style="display:none;">
         <div id="game-board"></div>
@@ -34,13 +29,8 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const board = [
-            {x: 50, y: 50}, {x: 150, y: 50}, {x: 250, y: 50}, {x: 350, y: 50}, {x: 450, y: 50},
-            {x: 450, y: 150}, {x: 450, y: 250}, {x: 450, y: 350}, {x: 350, y: 350},
-            {x: 250, y: 350}, {x: 150, y: 350}, {x: 50, y: 350}, {x: 50, y: 250}, {x: 50, y: 150}
-        ];
+        const board = [{x:50,y:50},{x:150,y:50},{x:250,y:50},{x:350,y:50},{x:450,y:50},{x:450,y:150},{x:450,y:250},{x:450,y:350},{x:350,y:350},{x:250,y:350},{x:150,y:350},{x:50,y:350},{x:50,y:250},{x:50,y:150}];
         
-        // 渲染地圖
         board.forEach((pos) => {
             const div = document.createElement('div');
             div.className = 'space';
@@ -48,13 +38,16 @@
             document.getElementById('game-board').appendChild(div);
         });
 
-        function joinGame(avatar) {
-            socket.emit('joinGame', avatar);
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('game-container').style.display = 'block';
-        }
-
+        function joinGame(avatar) { socket.emit('joinGame', avatar); }
         function roll() { socket.emit('rollDice'); }
+
+        socket.on('currentPlayers', (players) => {
+            if(players[socket.id]) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('game-container').style.display = 'block';
+            }
+            updateBoard(players);
+        });
 
         socket.on('turnUpdate', (data) => {
             document.getElementById('roll-btn').disabled = (data.currentTurnId !== socket.id);
@@ -62,19 +55,21 @@
 
         socket.on('diceResult', (data) => {
             document.getElementById('dice-display').innerText = "擲出了 " + data.steps;
-            updatePlayers(data.player);
+            updateBoard(null, data.player);
         });
 
         window.addEventListener('keydown', (e) => {
             if (e.key === 'ArrowRight' || e.key === 'd') socket.emit('playerMove', 1);
         });
 
-        function updatePlayers(p) {
-            let el = document.getElementById(p.id) || document.createElement('div');
-            el.id = p.id; el.className = 'player'; el.innerText = p.avatar;
-            el.style.left = (board[p.position].x + 15) + 'px'; 
-            el.style.top = (board[p.position].y + 5) + 'px';
-            document.getElementById('game-board').appendChild(el);
+        function updateBoard(players, p) {
+            if(p) {
+                let el = document.getElementById(p.id) || document.createElement('div');
+                el.id = p.id; el.className = 'player'; el.innerText = p.avatar;
+                el.style.left = (board[p.position].x + 15) + 'px'; 
+                el.style.top = (board[p.position].y + 5) + 'px';
+                document.getElementById('game-board').appendChild(el);
+            }
         }
     </script>
 </body>
