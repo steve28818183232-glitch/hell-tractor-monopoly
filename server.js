@@ -53,6 +53,12 @@ io.on('connection', (socket) => {
         currentTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
         updateTurn();
     });
+    socket.on('playerMove', (targetIndex) => {
+    const player = players[socket.id];
+    // 簡單防禦：只允許移動到鄰近的格子 (我們稍後會在前端設定岔路邏輯)
+    player.position = targetIndex; 
+    io.emit('playerMoved', { id: socket.id, position: targetIndex });
+});
 
     socket.on('disconnect', () => {
         console.log('玩家離開：' + socket.id);
