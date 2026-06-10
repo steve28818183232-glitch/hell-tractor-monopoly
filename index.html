@@ -4,17 +4,27 @@
     <meta charset="UTF-8">
     <title>地獄拖拉機大富翁</title>
     <style>
-        body { text-align: center; font-family: sans-serif; background: #f0f8ff; }
-        #game-board { position: relative; width: 600px; height: 450px; margin: 20px auto; background: #e8f5e9; border: 6px solid #4caf50; }
-        .space { position: absolute; width: 70px; height: 70px; border: 2px solid #333; display: flex; align-items: center; justify-content: center; }
-        .player { position: absolute; width: 40px; height: 40px; font-size: 30px; transition: all 0.4s; z-index: 10; }
+        body { text-align: center; font-family: 'Segoe UI', sans-serif; background: #f0f8ff; }
+        /* 遊戲板：立體草地質感 */
+        #game-board { position: relative; width: 600px; height: 450px; margin: 20px auto; background: #e8f5e9; border: 6px solid #4caf50; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+        
+        /* 空間方塊：立體厚度感 */
+        .space { position: absolute; width: 70px; height: 70px; background: #64b5f6; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 6px 0 #1e88e5; font-weight: bold; }
+        
+        /* 玩家角色：呼吸彈跳特效 */
+        .player { position: absolute; width: 40px; height: 40px; font-size: 30px; transition: all 0.4s ease-in-out; z-index: 10; animation: bounce 0.6s infinite alternate; }
+        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+        
+        button { font-size: 20px; padding: 10px 20px; background: #ff9800; color: white; border: none; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #e65100; }
+        button:disabled { background: #ccc; box-shadow: 0 4px 0 #999; }
     </style>
 </head>
 <body>
     <div id="login-screen">
-        <button onclick="joinGame('👼')">選👼</button>
-        <button onclick="joinGame('🦊')">選🦊</button>
-        <button onclick="joinGame('👻')">選👻</button>
+        <h2>選擇角色</h2>
+        <button onclick="joinGame('👼')">👼</button>
+        <button onclick="joinGame('🦊')">🦊</button>
+        <button onclick="joinGame('👻')">👻</button>
     </div>
     <div id="game-container" style="display:none;">
         <div id="game-board"></div>
@@ -31,11 +41,10 @@
         ];
         
         // 渲染地圖
-        board.forEach((pos, i) => {
+        board.forEach((pos) => {
             const div = document.createElement('div');
             div.className = 'space';
             div.style.left = pos.x + 'px'; div.style.top = pos.y + 'px';
-            div.innerText = i;
             document.getElementById('game-board').appendChild(div);
         });
 
@@ -57,13 +66,14 @@
         });
 
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') socket.emit('playerMove', 1); // 簡化邏輯供測試
+            if (e.key === 'ArrowRight' || e.key === 'd') socket.emit('playerMove', 1);
         });
 
         function updatePlayers(p) {
             let el = document.getElementById(p.id) || document.createElement('div');
             el.id = p.id; el.className = 'player'; el.innerText = p.avatar;
-            el.style.left = board[p.position].x + 'px'; el.style.top = board[p.position].y + 'px';
+            el.style.left = (board[p.position].x + 15) + 'px'; 
+            el.style.top = (board[p.position].y + 5) + 'px';
             document.getElementById('game-board').appendChild(el);
         }
     </script>
