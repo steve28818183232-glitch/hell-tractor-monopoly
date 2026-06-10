@@ -3,20 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地獄拖拉機大富翁 - 瑪利歐派對版</title>
+    <title>地獄拖拉機大富翁 - 2.5D 立體版</title>
     <style>
-        body { text-align: center; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f8ff; margin-top: 20px;}
-        canvas { background: #e8f5e9; border: 4px solid #4caf50; border-radius: 15px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);}
-        .ui-container { margin-top: 15px; }
-        button { font-size: 20px; padding: 10px 20px; cursor: pointer; background: #ff9800; color: white; border: none; border-radius: 8px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.2s;}
-        button:hover { background: #e68a00; transform: translateY(-2px); }
-        button:active { transform: translateY(0); }
-        #dice-display { font-size: 24px; font-weight: bold; color: #d32f2f; margin-left: 15px; }
+        body { text-align: center; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f8ff; margin-top: 20px; overflow: hidden; }
+        h2 { color: #333; text-shadow: 2px 2px 4px rgba(0,0,0,0.1); }
+        
+        /* 遊戲盤容器：變成有厚度的草地底座 */
+        #game-board { position: relative; width: 600px; height: 450px; margin: 0 auto; background: #e8f5e9; border: 6px solid #4caf50; border-radius: 20px; box-shadow: 0 15px 25px rgba(0,0,0,0.2), inset 0 5px 10px rgba(0,0,0,0.05); }
+        
+        /* 立體格子魔法：加入深色底部陰影，創造厚度感 */
+        .space { position: absolute; width: 70px; height: 70px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: #333; box-sizing: border-box; box-shadow: 0 8px 0 #999, 0 10px 10px rgba(0,0,0,0.3); transition: transform 0.2s; }
+        .space.start { background: #ffeb3b; box-shadow: 0 8px 0 #fbc02d, 0 10px 10px rgba(0,0,0,0.3); }
+        .space.normal { background: #64b5f6; box-shadow: 0 8px 0 #1e88e5, 0 10px 10px rgba(0,0,0,0.3); }
+        .space.question { background: #ce93d8; box-shadow: 0 8px 0 #8e24aa, 0 10px 10px rgba(0,0,0,0.3); }
+        .space.danger { background: #e57373; box-shadow: 0 8px 0 #e53935, 0 10px 10px rgba(0,0,0,0.3); }
+        
+        /* 玩家角色：加入平滑移動與呼吸彈跳動畫 */
+        .player { position: absolute; width: 40px; height: 40px; font-size: 35px; text-align: center; line-height: 40px; z-index: 10; transition: left 0.4s ease-in-out, top 0.4s ease-in-out; animation: bounce 0.6s infinite alternate; }
+        @keyframes bounce { from { transform: translateY(0) scale(1); } to { transform: translateY(-12px) scale(1.1); } }
+
+        /* 立體按鍵：按下去會有真實的下壓回饋 */
+        .ui-container { margin-top: 30px; display: flex; justify-content: center; align-items: center; gap: 20px; }
+        button { font-size: 22px; padding: 12px 25px; cursor: pointer; background: #ff9800; color: white; border: none; border-radius: 15px; font-weight: bold; box-shadow: 0 6px 0 #e65100, 0 10px 10px rgba(0,0,0,0.2); transition: 0.1s;}
+        button:active { transform: translateY(6px); box-shadow: 0 0 0 #e65100, 0 4px 4px rgba(0,0,0,0.2); }
+        #dice-display { font-size: 24px; font-weight: bold; color: #d32f2f; background: white; padding: 10px 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        
+        /* 精緻排行榜 */
+        #scoreboard { position: absolute; top: 20px; right: 20px; text-align: left; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); font-weight: bold; }
+        .score-item { margin-bottom: 8px; font-size: 18px; }
     </style>
 </head>
 <body>
-    <h2>🌟 瑪利歐派對大富翁 🌟</h2>
-    <canvas id="gameCanvas" width="600" height="450"></canvas>
+    <h2>🌟 2.5D 立體大富翁 🌟</h2>
+    <div id="game-board">
+        <!-- JavaScript 會動態在這裡生成立體格子與玩家 -->
+    </div>
+    
+    <div id="scoreboard">🏆 收集榜<div id="score-list"></div></div>
     
     <div class="ui-container">
         <button onclick="roll()">🎲 擲骰子</button>
@@ -26,34 +49,47 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        const boardContainer = document.getElementById('game-board');
+        const scoreList = document.getElementById('score-list');
         const diceDisplay = document.getElementById('dice-display');
         let players = {};
 
-        // 繪製地圖：環狀長方形的 14 個格子座標
         const board = [
-            {x: 50, y: 50, color: '#ffeb3b', text: '起點'},
-            {x: 150, y: 50, color: '#64b5f6', text: ''},
-            {x: 250, y: 50, color: '#ce93d8', text: '？'},
-            {x: 350, y: 50, color: '#64b5f6', text: ''},
-            {x: 450, y: 50, color: '#e57373', text: '！'},
-            {x: 450, y: 150, color: '#64b5f6', text: ''},
-            {x: 450, y: 250, color: '#ce93d8', text: '？'},
-            {x: 450, y: 350, color: '#64b5f6', text: ''},
-            {x: 350, y: 350, color: '#e57373', text: '！'},
-            {x: 250, y: 350, color: '#64b5f6', text: ''},
-            {x: 150, y: 350, color: '#ce93d8', text: '？'},
-            {x: 50, y: 350, color: '#64b5f6', text: ''},
-            {x: 50, y: 250, color: '#e57373', text: '！'},
-            {x: 50, y: 150, color: '#64b5f6', text: ''}
+            {x: 50, y: 50, type: 'start', text: '起點'},
+            {x: 150, y: 50, type: 'normal', text: ''},
+            {x: 250, y: 50, type: 'question', text: '？'},
+            {x: 350, y: 50, type: 'normal', text: ''},
+            {x: 450, y: 50, type: 'danger', text: '！'},
+            {x: 450, y: 150, type: 'normal', text: ''},
+            {x: 450, y: 250, type: 'question', text: '？'},
+            {x: 450, y: 350, type: 'normal', text: ''},
+            {x: 350, y: 350, type: 'danger', text: '！'},
+            {x: 250, y: 350, type: 'normal', text: ''},
+            {x: 150, y: 350, type: 'question', text: '？'},
+            {x: 50, y: 350, type: 'normal', text: ''},
+            {x: 50, y: 250, type: 'danger', text: '！'},
+            {x: 50, y: 150, type: 'normal', text: ''}
         ];
 
-        socket.on('currentPlayers', (serverPlayers) => { players = serverPlayers; draw(); });
-        socket.on('newPlayer', (playerInfo) => { players[playerInfo.id] = playerInfo; draw(); });
-        socket.on('playerDisconnected', (playerId) => { delete players[playerId]; draw(); });
+        // 繪製立體格子
+        board.forEach((space) => {
+            const spaceEl = document.createElement('div');
+            spaceEl.className = `space ${space.type}`;
+            spaceEl.style.left = space.x + 'px';
+            spaceEl.style.top = space.y + 'px';
+            spaceEl.innerText = space.text;
+            boardContainer.appendChild(spaceEl);
+        });
+
+        socket.on('currentPlayers', (serverPlayers) => { players = serverPlayers; updateBoard(); });
+        socket.on('newPlayer', (playerInfo) => { players[playerInfo.id] = playerInfo; updateBoard(); });
+        socket.on('playerDisconnected', (playerId) => { 
+            delete players[playerId]; 
+            const el = document.getElementById(playerId);
+            if(el) el.remove();
+            updateBoard(); 
+        });
         
-        // 接收有人擲骰子的結果
         socket.on('diceResult', (data) => {
             players[data.id] = data.player;
             if(data.id === socket.id) {
@@ -61,53 +97,31 @@
             } else {
                 diceDisplay.innerText = `${players[data.id].avatar} 擲出了 ${data.steps} 步！`;
             }
-            draw();
+            updateBoard();
         });
 
-        // 點擊按鈕觸發擲骰子
-        function roll() {
-            socket.emit('rollDice');
-        }
+        function roll() { socket.emit('rollDice'); }
 
-        // 重新繪製遊戲畫面
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 1. 畫出地圖方塊
-            board.forEach((space) => {
-                ctx.fillStyle = space.color;
-                ctx.fillRect(space.x, space.y, 80, 80);
-                ctx.strokeStyle = '#333';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(space.x, space.y, 80, 80);
-                
-                ctx.fillStyle = '#333';
-                ctx.font = '24px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(space.text, space.x + 40, space.y + 40);
-            });
-
-            // 2. 畫出排行榜與玩家
-            let scoreY = 30;
-            ctx.fillStyle = '#333';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'left';
-            ctx.fillText('🏆 收集榜', 500, scoreY);
-            
+        function updateBoard() {
+            scoreList.innerHTML = ''; 
             for (let id in players) {
                 const p = players[id];
                 const space = board[p.position];
                 
-                // 畫出玩家角色 (加入微小偏移，避免大家都疊在一起)
-                ctx.font = '30px Arial';
-                ctx.textAlign = 'center';
+                let playerEl = document.getElementById(id);
+                if (!playerEl) {
+                    playerEl = document.createElement('div');
+                    playerEl.id = id;
+                    playerEl.className = 'player';
+                    playerEl.innerText = p.avatar;
+                    boardContainer.appendChild(playerEl);
+                }
+                
                 const offset = (id.charCodeAt(0) % 5) * 5; 
-                ctx.fillText(p.avatar, space.x + 40 + offset, space.y + 40 + offset);
+                playerEl.style.left = (space.x + 15 + offset) + 'px';
+                playerEl.style.top = (space.y + 5 + offset) + 'px';
 
-                // 畫出排行榜上的分數
-                scoreY += 25;
-                ctx.fillText(`${p.avatar} : ${p.coins} 💰`, 500, scoreY);
+                scoreList.innerHTML += `<div class="score-item">${p.avatar} : ${p.coins} 💰</div>`;
             }
         }
     </script>
