@@ -1,147 +1,96 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>地獄拖拉機大富翁 - 選角與回合制</title>
-    <style>
-        body { text-align: center; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f0f8ff; margin: 0; overflow: hidden; }
-        
-        /* 選角大廳畫面 */
-        #login-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        .avatar-btn { font-size: 50px; margin: 10px; cursor: pointer; border: 4px solid transparent; border-radius: 15px; padding: 10px; transition: 0.2s; background: #f5f5f5;}
-        .avatar-btn:hover { border-color: #ff9800; transform: scale(1.1); }
-        
-        /* 遊戲主要畫面 (一開始隱藏) */
-        #game-container { display: none; padding-top: 20px; }
-        
-        #game-board { position: relative; width: 600px; height: 450px; margin: 0 auto; background: #e8f5e9; border: 6px solid #4caf50; border-radius: 20px; box-shadow: 0 15px 25px rgba(0,0,0,0.2), inset 0 5px 10px rgba(0,0,0,0.05); }
-        .space { position: absolute; width: 70px; height: 70px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: #333; box-shadow: 0 8px 0 #999, 0 10px 10px rgba(0,0,0,0.3); }
-        .space.start { background: #ffeb3b; box-shadow: 0 8px 0 #fbc02d, 0 10px 10px rgba(0,0,0,0.3); }
-        .space.normal { background: #64b5f6; box-shadow: 0 8px 0 #1e88e5, 0 10px 10px rgba(0,0,0,0.3); }
-        .space.question { background: #ce93d8; box-shadow: 0 8px 0 #8e24aa, 0 10px 10px rgba(0,0,0,0.3); }
-        .space.danger { background: #e57373; box-shadow: 0 8px 0 #e53935, 0 10px 10px rgba(0,0,0,0.3); }
-        
-        .player { position: absolute; width: 40px; height: 40px; font-size: 35px; text-align: center; line-height: 40px; z-index: 10; transition: left 0.4s, top 0.4s; animation: bounce 0.6s infinite alternate; }
-        @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-12px) scale(1.1); } }
-
-        .ui-container { margin-top: 30px; }
-        button { font-size: 22px; padding: 12px 25px; cursor: pointer; background: #ff9800; color: white; border: none; border-radius: 15px; font-weight: bold; box-shadow: 0 6px 0 #e65100; transition: 0.1s;}
-        button:disabled { background: #ccc; box-shadow: 0 6px 0 #999; cursor: not-allowed; }
-        button:active:not(:disabled) { transform: translateY(6px); box-shadow: 0 0 0 #e65100; }
-        
-        #turn-display { font-size: 24px; font-weight: bold; color: #d32f2f; margin-left: 20px; background: white; padding: 10px 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        #scoreboard { position: absolute; top: 20px; right: 20px; text-align: left; background: rgba(255,255,255,0.9); padding: 15px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); font-weight: bold; }
-    </style>
-</head>
-<body>
-
-    <div id="login-screen">
-        <h2>✨ 請選擇你的專屬盲盒角色 ✨</h2>
-        <div>
-            <span class="avatar-btn" onclick="joinGame('👼')">👼</span>
-            <span class="avatar-btn" onclick="🦊">🦊</span>
-            <span class="avatar-btn" onclick="joinGame('👻')">👻</span>
-            <span class="avatar-btn" onclick="joinGame('🐸')">🐸</span>
-            <span class="avatar-btn" onclick="joinGame('🦖')">🦖</span>
-            <span class="avatar-btn" onclick="joinGame('🦄')">🦄</span>
-        </div>
-        <p style="color:#666;">點擊圖案進入遊戲</p>
-    </div>
-
-    <div id="game-container">
-        <h2>🌟 2.5D 立體大富翁 🌟</h2>
-        <div id="game-board"></div>
-        <div id="scoreboard">🏆 收集榜<div id="score-list"></div></div>
-        
-        <div class="ui-container">
-            <button id="roll-btn" onclick="roll()" disabled>🎲 擲骰子</button>
-            <span id="turn-display">等待玩家加入...</span>
-        </div>
-    </div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    const loginScreen = document.getElementById('login-screen');
+    const gameContainer = document.getElementById('game-container');
+    const boardContainer = document.getElementById('game-board');
+    const scoreList = document.getElementById('score-list');
+    const turnDisplay = document.getElementById('turn-display');
+    const rollBtn = document.getElementById('roll-btn');
+    const diceDisplay = document.getElementById('dice-display');
     
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        const loginScreen = document.getElementById('login-screen');
-        const gameContainer = document.getElementById('game-container');
-        const boardContainer = document.getElementById('game-board');
-        const scoreList = document.getElementById('score-list');
-        const turnDisplay = document.getElementById('turn-display');
-        const rollBtn = document.getElementById('roll-btn');
-        let players = {};
-        let myId = null;
+    let players = {};
+    let myId = null;
+    let currentTurnIndex = 0;
+    let turnOrder = [];
 
-        const board = [
-            {x: 50, y: 50, type: 'start', text: '起'}, {x: 150, y: 50, type: 'normal', text: ''}, {x: 250, y: 50, type: 'question', text: '？'}, {x: 350, y: 50, type: 'normal', text: ''}, {x: 450, y: 50, type: 'danger', text: '！'},
-            {x: 450, y: 150, type: 'normal', text: ''}, {x: 450, y: 250, type: 'question', text: '？'}, {x: 450, y: 350, type: 'normal', text: ''},
-            {x: 350, y: 350, type: 'danger', text: '！'}, {x: 250, y: 350, type: 'normal', text: ''}, {x: 150, y: 350, type: 'question', text: '？'}, {x: 50, y: 350, type: 'normal', text: ''},
-            {x: 50, y: 250, type: 'danger', text: '！'}, {x: 50, y: 150, type: 'normal', text: ''}
-        ];
+    const board = [
+        {x: 50, y: 50, type: 'start', text: '起'}, {x: 150, y: 50, type: 'normal', text: ''}, {x: 250, y: 50, type: 'question', text: '？'}, {x: 350, y: 50, type: 'normal', text: ''}, {x: 450, y: 50, type: 'danger', text: '！'},
+        {x: 450, y: 150, type: 'normal', text: ''}, {x: 450, y: 250, type: 'question', text: '？'}, {x: 450, y: 350, type: 'normal', text: ''},
+        {x: 350, y: 350, type: 'danger', text: '！'}, {x: 250, y: 350, type: 'normal', text: ''}, {x: 150, y: 350, type: 'question', text: '？'}, {x: 50, y: 350, type: 'normal', text: ''},
+        {x: 50, y: 250, type: 'danger', text: '！'}, {x: 50, y: 150, type: 'normal', text: ''}
+    ];
 
-        board.forEach((space) => {
-            const spaceEl = document.createElement('div');
-            spaceEl.className = `space ${space.type}`;
-            spaceEl.style.left = space.x + 'px'; spaceEl.style.top = space.y + 'px';
-            spaceEl.innerText = space.text;
-            boardContainer.appendChild(spaceEl);
-        });
+    // 初始化地圖格子
+    board.forEach((space) => {
+        const spaceEl = document.createElement('div');
+        spaceEl.className = `space ${space.type}`;
+        spaceEl.style.left = space.x + 'px'; spaceEl.style.top = space.y + 'px';
+        spaceEl.innerText = space.text;
+        boardContainer.appendChild(spaceEl);
+    });
 
-        function joinGame(avatar) {
-            socket.emit('joinGame', avatar);
-            loginScreen.style.display = 'none';
-            gameContainer.style.display = 'block';
-        }
+    function joinGame(avatar) {
+        socket.emit('joinGame', avatar);
+        loginScreen.style.display = 'none';
+        gameContainer.style.display = 'block';
+    }
 
-        socket.on('connect', () => { myId = socket.id; });
-        socket.on('currentPlayers', (serverPlayers) => { players = serverPlayers; updateBoard(); });
-        socket.on('playerDisconnected', (playerId) => { 
-            const el = document.getElementById(playerId);
-            if(el) el.remove();
-            delete players[playerId]; updateBoard(); 
-        });
+    socket.on('connect', () => { myId = socket.id; });
+    socket.on('currentPlayers', (serverPlayers) => { players = serverPlayers; updateBoard(); });
+    
+    // 顯示骰子數字
+    socket.on('diceResult', (data) => {
+        players[data.id] = data.player;
+        diceDisplay.innerText = `擲出了 ${data.steps} 點！請按方向鍵移動`;
+        updateBoard();
+    });
+
+    // 監聽鍵盤移動
+    window.addEventListener('keydown', (e) => {
+        // 只有輪到自己且已經擲過骰子才能動
+        if (!players[myId]) return;
+
+        let newPos = players[myId].position;
+        if (e.key === 'ArrowRight' || e.key === 'd') newPos++;
+        if (e.key === 'ArrowLeft' || e.key === 'a') newPos--;
         
-        socket.on('diceResult', (data) => {
-            players[data.id] = data.player;
-            updateBoard();
-        });
-
-        // 接收回合更新，判斷要不要解鎖按鈕
-        socket.on('turnUpdate', (currentTurnId) => {
-            if (!players[currentTurnId]) return;
-            const currentPlayer = players[currentTurnId];
-            
-            if (currentTurnId === myId) {
-                turnDisplay.innerText = "👉 現在輪到你了！";
-                turnDisplay.style.color = "#2e7d32";
-                rollBtn.disabled = false; // 解鎖按鈕
-            } else {
-                turnDisplay.innerText = `⏳ 等待 ${currentPlayer.avatar} 擲骰子...`;
-                turnDisplay.style.color = "#d32f2f";
-                rollBtn.disabled = true;  // 鎖定按鈕
-            }
-        });
-
-        function roll() { 
-            socket.emit('rollDice'); 
-            rollBtn.disabled = true; // 按下後立刻鎖定防連點
+        if (newPos >= 0 && newPos < board.length) {
+            socket.emit('playerMove', newPos);
         }
+    });
 
-        function updateBoard() {
-            scoreList.innerHTML = ''; 
-            for (let id in players) {
-                const p = players[id];
-                const space = board[p.position];
-                let playerEl = document.getElementById(id);
-                if (!playerEl) {
-                    playerEl = document.createElement('div'); playerEl.id = id; playerEl.className = 'player'; playerEl.innerText = p.avatar;
-                    boardContainer.appendChild(playerEl);
-                }
-                const offset = (id.charCodeAt(0) % 5) * 5; 
-                playerEl.style.left = (space.x + 15 + offset) + 'px'; playerEl.style.top = (space.y + 5 + offset) + 'px';
-                scoreList.innerHTML += `<div class="score-item">${p.avatar} : ${p.coins} 💰</div>`;
-            }
+    socket.on('playerMoved', (data) => {
+        players[data.id].position = data.position;
+        updateBoard();
+    });
+
+    socket.on('turnUpdate', (data) => {
+        const { currentTurnId, order } = data;
+        turnOrder = order;
+        if (currentTurnId === myId) {
+            turnDisplay.innerText = "👉 輪到你了！請擲骰子";
+            rollBtn.disabled = false;
+        } else {
+            turnDisplay.innerText = `⏳ 等待別人動作...`;
+            rollBtn.disabled = true;
         }
-    </script>
-</body>
-</html>
+    });
+
+    function roll() { socket.emit('rollDice'); rollBtn.disabled = true; }
+
+    function updateBoard() {
+        scoreList.innerHTML = ''; 
+        for (let id in players) {
+            const p = players[id];
+            const space = board[p.position];
+            let playerEl = document.getElementById(id);
+            if (!playerEl) {
+                playerEl = document.createElement('div'); playerEl.id = id; playerEl.className = 'player'; playerEl.innerText = p.avatar;
+                boardContainer.appendChild(playerEl);
+            }
+            playerEl.style.left = (space.x + 15) + 'px'; playerEl.style.top = (space.y + 5) + 'px';
+            scoreList.innerHTML += `<div class="score-item">${p.avatar} : ${p.coins} 💰</div>`;
+        }
+    }
+</script>
