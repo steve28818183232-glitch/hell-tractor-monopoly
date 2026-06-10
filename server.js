@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require("socket.io");
-
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -11,9 +10,13 @@ app.use(express.static(__dirname));
 const players = {};
 let turnOrder = [];
 let currentTurnIndex = 0;
+const takenAvatars = new Set();
+const MAX_PLAYERS = 8;
 
 io.on('connection', (socket) => {
     socket.on('joinGame', (avatar) => {
+        if (takenAvatars.has(avatar) || Object.keys(players).length >= MAX_PLAYERS) return;
+        takenAvatars.add(avatar);
         players[socket.id] = { id: socket.id, position: 0, coins: 0, avatar: avatar };
         turnOrder.push(socket.id);
         io.emit('currentPlayers', players);
@@ -39,10 +42,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        delete players[socket.id];
-        turnOrder = turnOrder.filter(id => id !== socket.id);
-        io.emit('currentPlayers', players);
-        updateTurn();
+        if (players[socket.id]) {
+            takenAvatars.delete(players[socket.id].avatar);
+            delete players[socket.id];
+            turnOrder = turnOrder.filter(id => id !== socket.id);
+            io.emit('currentPlayers', players);
+            updateTurn();
+        }
     });
 
     function updateTurn() {
