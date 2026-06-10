@@ -1,96 +1,71 @@
-<script src="/socket.io/socket.io.js"></script>
-<script>
-    const socket = io();
-    const loginScreen = document.getElementById('login-screen');
-    const gameContainer = document.getElementById('game-container');
-    const boardContainer = document.getElementById('game-board');
-    const scoreList = document.getElementById('score-list');
-    const turnDisplay = document.getElementById('turn-display');
-    const rollBtn = document.getElementById('roll-btn');
-    const diceDisplay = document.getElementById('dice-display');
-    
-    let players = {};
-    let myId = null;
-    let currentTurnIndex = 0;
-    let turnOrder = [];
-
-    const board = [
-        {x: 50, y: 50, type: 'start', text: '起'}, {x: 150, y: 50, type: 'normal', text: ''}, {x: 250, y: 50, type: 'question', text: '？'}, {x: 350, y: 50, type: 'normal', text: ''}, {x: 450, y: 50, type: 'danger', text: '！'},
-        {x: 450, y: 150, type: 'normal', text: ''}, {x: 450, y: 250, type: 'question', text: '？'}, {x: 450, y: 350, type: 'normal', text: ''},
-        {x: 350, y: 350, type: 'danger', text: '！'}, {x: 250, y: 350, type: 'normal', text: ''}, {x: 150, y: 350, type: 'question', text: '？'}, {x: 50, y: 350, type: 'normal', text: ''},
-        {x: 50, y: 250, type: 'danger', text: '！'}, {x: 50, y: 150, type: 'normal', text: ''}
-    ];
-
-    // 初始化地圖格子
-    board.forEach((space) => {
-        const spaceEl = document.createElement('div');
-        spaceEl.className = `space ${space.type}`;
-        spaceEl.style.left = space.x + 'px'; spaceEl.style.top = space.y + 'px';
-        spaceEl.innerText = space.text;
-        boardContainer.appendChild(spaceEl);
-    });
-
-    function joinGame(avatar) {
-        socket.emit('joinGame', avatar);
-        loginScreen.style.display = 'none';
-        gameContainer.style.display = 'block';
-    }
-
-    socket.on('connect', () => { myId = socket.id; });
-    socket.on('currentPlayers', (serverPlayers) => { players = serverPlayers; updateBoard(); });
-    
-    // 顯示骰子數字
-    socket.on('diceResult', (data) => {
-        players[data.id] = data.player;
-        diceDisplay.innerText = `擲出了 ${data.steps} 點！請按方向鍵移動`;
-        updateBoard();
-    });
-
-    // 監聽鍵盤移動
-    window.addEventListener('keydown', (e) => {
-        // 只有輪到自己且已經擲過骰子才能動
-        if (!players[myId]) return;
-
-        let newPos = players[myId].position;
-        if (e.key === 'ArrowRight' || e.key === 'd') newPos++;
-        if (e.key === 'ArrowLeft' || e.key === 'a') newPos--;
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>地獄拖拉機大富翁</title>
+    <style>
+        body { text-align: center; font-family: sans-serif; background: #f0f8ff; }
+        #game-board { position: relative; width: 600px; height: 450px; margin: 20px auto; background: #e8f5e9; border: 6px solid #4caf50; }
+        .space { position: absolute; width: 70px; height: 70px; border: 2px solid #333; display: flex; align-items: center; justify-content: center; }
+        .player { position: absolute; width: 40px; height: 40px; font-size: 30px; transition: all 0.4s; z-index: 10; }
+    </style>
+</head>
+<body>
+    <div id="login-screen">
+        <button onclick="joinGame('👼')">選👼</button>
+        <button onclick="joinGame('🦊')">選🦊</button>
+        <button onclick="joinGame('👻')">選👻</button>
+    </div>
+    <div id="game-container" style="display:none;">
+        <div id="game-board"></div>
+        <button id="roll-btn" onclick="roll()" disabled>擲骰子</button>
+        <div id="dice-display"></div>
+    </div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const board = [
+            {x: 50, y: 50}, {x: 150, y: 50}, {x: 250, y: 50}, {x: 350, y: 50}, {x: 450, y: 50},
+            {x: 450, y: 150}, {x: 450, y: 250}, {x: 450, y: 350}, {x: 350, y: 350},
+            {x: 250, y: 350}, {x: 150, y: 350}, {x: 50, y: 350}, {x: 50, y: 250}, {x: 50, y: 150}
+        ];
         
-        if (newPos >= 0 && newPos < board.length) {
-            socket.emit('playerMove', newPos);
+        // 渲染地圖
+        board.forEach((pos, i) => {
+            const div = document.createElement('div');
+            div.className = 'space';
+            div.style.left = pos.x + 'px'; div.style.top = pos.y + 'px';
+            div.innerText = i;
+            document.getElementById('game-board').appendChild(div);
+        });
+
+        function joinGame(avatar) {
+            socket.emit('joinGame', avatar);
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
         }
-    });
 
-    socket.on('playerMoved', (data) => {
-        players[data.id].position = data.position;
-        updateBoard();
-    });
+        function roll() { socket.emit('rollDice'); }
 
-    socket.on('turnUpdate', (data) => {
-        const { currentTurnId, order } = data;
-        turnOrder = order;
-        if (currentTurnId === myId) {
-            turnDisplay.innerText = "👉 輪到你了！請擲骰子";
-            rollBtn.disabled = false;
-        } else {
-            turnDisplay.innerText = `⏳ 等待別人動作...`;
-            rollBtn.disabled = true;
+        socket.on('turnUpdate', (data) => {
+            document.getElementById('roll-btn').disabled = (data.currentTurnId !== socket.id);
+        });
+
+        socket.on('diceResult', (data) => {
+            document.getElementById('dice-display').innerText = "擲出了 " + data.steps;
+            updatePlayers(data.player);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') socket.emit('playerMove', 1); // 簡化邏輯供測試
+        });
+
+        function updatePlayers(p) {
+            let el = document.getElementById(p.id) || document.createElement('div');
+            el.id = p.id; el.className = 'player'; el.innerText = p.avatar;
+            el.style.left = board[p.position].x + 'px'; el.style.top = board[p.position].y + 'px';
+            document.getElementById('game-board').appendChild(el);
         }
-    });
-
-    function roll() { socket.emit('rollDice'); rollBtn.disabled = true; }
-
-    function updateBoard() {
-        scoreList.innerHTML = ''; 
-        for (let id in players) {
-            const p = players[id];
-            const space = board[p.position];
-            let playerEl = document.getElementById(id);
-            if (!playerEl) {
-                playerEl = document.createElement('div'); playerEl.id = id; playerEl.className = 'player'; playerEl.innerText = p.avatar;
-                boardContainer.appendChild(playerEl);
-            }
-            playerEl.style.left = (space.x + 15) + 'px'; playerEl.style.top = (space.y + 5) + 'px';
-            scoreList.innerHTML += `<div class="score-item">${p.avatar} : ${p.coins} 💰</div>`;
-        }
-    }
-</script>
+    </script>
+</body>
+</html>
