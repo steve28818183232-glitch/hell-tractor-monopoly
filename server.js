@@ -9,53 +9,74 @@ const io = new Server(server);
 app.use(express.static(__dirname));
 
 const players = {};
-// 給玩家隨機分配可愛的瑪利歐風格角色
-const avatars = ['🍄', '🐢', '🌟', '👻', '🐶', '🐱'];
-const boardLength = 14; // 我們的環狀地圖總共有 14 格
+let turnOrder = []; // 紀錄玩家順序的陣列
+let currentTurnIndex = 0; // 目前輪到第幾個人
+
+const boardLength = 14;
 
 io.on('connection', (socket) => {
-    console.log('有新玩家加入：' + socket.id);
+    console.log('有新玩家連線：' + socket.id);
     
-    // 玩家初始狀態設定
-    players[socket.id] = {
-        id: socket.id,
-        position: 0, // 大家都在第 0 格 (起點) 出生
-        coins: 0,    // 初始金幣為 0
-        avatar: avatars[Math.floor(Math.random() * avatars.length)]
-    };
-    
-    socket.emit('currentPlayers', players);
-    socket.broadcast.emit('newPlayer', players[socket.id]);
-
-    // 接收玩家按鈕「擲骰子」的指令
-    socket.on('rollDice', () => {
-        const player = players[socket.id];
-        if (!player) return;
+    // 玩家選擇角色後才正式加入遊戲
+    socket.on('joinGame', (selectedAvatar) => {
+        players[socket.id] = {
+            id: socket.id,
+            position: 0,
+            coins: 0,
+            avatar: selectedAvatar
+        };
+        turnOrder.push(socket.id); // 加入排隊隊伍
         
-        // 隨機產生 1 到 6 的步數
+        // 廣播給所有人最新的玩家名單和回合狀態
+        io.emit('currentPlayers', players);
+        updateTurn();
+    });
+
+    socket.on('rollDice', () => {
+        // 檢查是不是輪到這個人
+        if (turnOrder[currentTurnIndex] !== socket.id) return;
+        
+        const player = players[socket.id];
         const steps = Math.floor(Math.random() * 6) + 1;
         let newPosition = player.position + steps;
         
-        // 【核心邏輯】經過或回到終點 (第 0 格)，給予 Bonus 獎勵！
         if (newPosition >= boardLength) {
-            player.coins += 10; // 領取 10 個金幣的 Bonus！
-            newPosition = newPosition % boardLength; // 讓位置重新繞回前面
+            player.coins += 10;
+            newPosition = newPosition % boardLength;
         }
         
         player.position = newPosition;
         
-        // 廣播擲骰子結果與更新後的玩家狀態給所有人
         io.emit('diceResult', { id: socket.id, steps: steps, player: player });
+        
+        // 換下一個人
+        currentTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
+        updateTurn();
     });
 
     socket.on('disconnect', () => {
         console.log('玩家離開：' + socket.id);
         delete players[socket.id];
+        // 把離開的人從排隊隊伍中剔除
+        turnOrder = turnOrder.filter(id => id !== socket.id);
+        if (currentTurnIndex >= turnOrder.length) {
+            currentTurnIndex = 0;
+        }
+        io.emit('currentPlayers', players);
         io.emit('playerDisconnected', socket.id);
+        updateTurn();
     });
+
+    // 通知所有人現在輪到誰了
+    function updateTurn() {
+        if (turnOrder.length > 0) {
+            const currentTurnId = turnOrder[currentTurnIndex];
+            io.emit('turnUpdate', currentTurnId);
+        }
+    }
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`遊戲伺服器已啟動在 port ${PORT}`);
+    console.log(`遊戲伺服器已啟動`);
 });
